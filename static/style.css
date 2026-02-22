@@ -295,3 +295,27 @@ button:disabled {
         width: 100%;
     }
 }
+
+.runRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: nowrap;
+}
+
+.overwriteOpt {
+    margin: 0;
+    white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+    .runRow {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .overwriteOpt {
+        justify-content: center;
+    }
+}

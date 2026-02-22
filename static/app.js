@@ -1,3 +1,4 @@
+// static/app.js
 (() => {
     const $ = (id) => document.getElementById(id);
 
@@ -5,10 +6,10 @@
     const outputDir = $("outputDir");
     const recursive = $("recursive");
 
-    // API欄は削除済み（サーバー側 .env で固定）
     const user = $("user");
     const style = $("style");
     const chunkSep = $("chunkSep");
+    const overwrite = $("overwrite");
 
     const scanBtn = $("scanBtn");
     const runBtn = $("runBtn");
@@ -48,7 +49,7 @@
                 addLog(".env の DIFY_API_BASE / DIFY_API_KEY が未設定です。", "bad");
             }
         } catch {
-            // ここは静かに
+            // noop
         }
     }
 
@@ -84,6 +85,8 @@
                 user: (user?.value || "rag_converter").trim() || "rag_converter",
                 knowledge_style: style?.value || "rag_markdown",
                 chunk_sep: (chunkSep?.value || "***").trim() || "***",
+
+                overwrite: !!overwrite?.checked,
             };
 
             const r = await fetch("/api/run", {
@@ -124,15 +127,18 @@
                     try { obj = JSON.parse(dataLine); } catch { obj = { raw: dataLine }; }
 
                     if (ev === "meta") {
-                        addLog(`総件数: ${obj.total}`);
+                        const ow = obj.overwrite ? "ON" : "OFF";
+                        addLog(`総件数: ${obj.total} / 上書き: ${ow}`);
                     } else if (ev === "progress") {
                         addLog(`(${obj.index}/${obj.total}) ${obj.file}`);
+                    } else if (ev === "skip_one") {
+                        addLog(`スキップ: ${obj.file}（既存）`, "ok");
                     } else if (ev === "done_one") {
                         addLog(`保存: ${obj.file} -> ${obj.out}`, "ok");
                     } else if (ev === "error_one") {
                         addLog(`失敗: ${obj.file} / ${obj.error}`, "bad");
                     } else if (ev === "summary") {
-                        addLog(`完了: OK=${obj.ok}, NG=${obj.ng}, TOTAL=${obj.total}`, "ok");
+                        addLog(`完了: OK=${obj.ok}, SKIP=${obj.skip}, NG=${obj.ng}, TOTAL=${obj.total}`, "ok");
                     }
                 }
             }
@@ -146,6 +152,5 @@
         }
     });
 
-    // 起動時に .env 設定の有無だけ確認（キーは扱わない）
     getHealth();
 })();

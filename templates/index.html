@@ -41,7 +41,15 @@
 
                 <div class="row2">
                     <button id="scanBtn">対象ファイルをスキャン</button>
-                    <button id="runBtn" class="primary">変換を開始</button>
+
+                    <div class="runRow">
+                        <button id="runBtn" class="primary">変換を開始</button>
+
+                        <label class="row overwriteOpt">
+                            <input id="overwrite" type="checkbox" />
+                            <span>既存mdを上書き</span>
+                        </label>
+                    </div>
                 </div>
 
                 <div class="hint">

@@ -1,3 +1,4 @@
+# app.py
 # -*- coding: utf-8 -*-
 import os
 import re
@@ -13,23 +14,19 @@ from docx import Document
 from pypdf import PdfReader
 
 from openpyxl import load_workbook
-import xlrd  # for .xls
+import xlrd
 
-from pptx import Presentation  # for .pptx (and try .ppt)
+from pptx import Presentation
 
 
-# -------------------------------
-# .env 読み込み（APIはサーバー側固定）
-# -------------------------------
 load_dotenv()
 
-APP_TITLE = "ChuっとRAGコンバーター for md"
+APP_TITLE = "Chuっと👄RAGナレッジ変換（Markdown）"
 HEADER_MODEL_LABEL = "Model : ChatGPT 5.2"
 
 API_BASE = (os.getenv("DIFY_API_BASE") or "").strip().rstrip("/")
 API_KEY = (os.getenv("DIFY_API_KEY") or "").strip()
 
-# ---- 対象拡張子（xlsx / xls / xlsm / ppt / pptx 対応）----
 ALLOWED_EXTS = {
     ".txt", ".md", ".csv", ".json", ".log",
     ".html", ".xml", ".yml", ".yaml", ".ini", ".conf",
@@ -39,11 +36,8 @@ ALLOWED_EXTS = {
     ".ppt", ".pptx",
 }
 
-# ---- 入力文字上限（安全）----
 MAX_INPUT_CHARS = 180_000
 DEFAULT_CHUNK_SEP = "***"
-
-# ---- requests の安全設定 ----
 REQ_TIMEOUT_SEC = 300
 
 
@@ -53,7 +47,6 @@ def create_app():
 
     @app.get("/")
     def index():
-        # UIには「APIはサーバー側設定」を表示するだけ（キーは絶対返さない）
         return render_template(
             "index.html",
             title=APP_TITLE,
@@ -63,7 +56,6 @@ def create_app():
 
     @app.get("/api/health")
     def api_health():
-        # APIキーは返さない。設定状態だけ返す。
         return jsonify({
             "ok": True,
             "api_ready": bool(API_BASE and API_KEY),
@@ -84,11 +76,6 @@ def create_app():
 
     @app.post("/api/run")
     def api_run():
-        """
-        SSEで進捗を返しながら全ファイル変換する。
-        - API Base / API Key は .env から（UI入力なし）
-        - ログにもAPIキーを絶対に出さない
-        """
         if not API_BASE or not API_KEY:
             return jsonify({
                 "ok": False,
@@ -105,6 +92,8 @@ def create_app():
         knowledge_style = (data.get("knowledge_style") or "rag_markdown").strip()
         chunk_sep = (data.get("chunk_sep") or DEFAULT_CHUNK_SEP).strip() or DEFAULT_CHUNK_SEP
 
+        overwrite = bool(data.get("overwrite", False))
+
         if not input_dir or not os.path.isdir(input_dir):
             return jsonify({"ok": False, "error": "入力フォルダが存在しません。"}), 400
         if not output_dir:
@@ -114,16 +103,29 @@ def create_app():
         files = list_files(input_dir, recursive=recursive)
 
         def sse():
-            yield sse_event("meta", {"title": APP_TITLE, "model": HEADER_MODEL_LABEL, "total": len(files)})
+            yield sse_event("meta", {
+                "title": APP_TITLE,
+                "model": HEADER_MODEL_LABEL,
+                "total": len(files),
+                "overwrite": overwrite,
+            })
 
             ok_count = 0
             ng_count = 0
+            skip_count = 0
 
             for idx, relpath in enumerate(files, start=1):
                 abspath = os.path.join(input_dir, relpath)
                 yield sse_event("progress", {"index": idx, "total": len(files), "file": relpath})
 
                 try:
+                    out_path = make_output_path(output_dir, relpath)
+
+                    if (not overwrite) and os.path.exists(out_path):
+                        skip_count += 1
+                        yield sse_event("skip_one", {"file": relpath, "out": os.path.relpath(out_path, output_dir)})
+                        continue
+
                     raw_text, meta = extract_text(abspath, knowledge_style=knowledge_style)
 
                     if not raw_text.strip():
@@ -143,7 +145,6 @@ def create_app():
                         chunk_sep=chunk_sep,
                     )
 
-                    out_path = make_output_path(output_dir, relpath)
                     os.makedirs(os.path.dirname(out_path), exist_ok=True)
                     with open(out_path, "w", encoding="utf-8", newline="\n") as f:
                         f.write(md)
@@ -155,16 +156,18 @@ def create_app():
                     ng_count += 1
                     yield sse_event("error_one", {"file": relpath, "error": safe_err(str(e))})
 
-            yield sse_event("summary", {"ok": ok_count, "ng": ng_count, "total": len(files)})
+            yield sse_event("summary", {
+                "ok": ok_count,
+                "ng": ng_count,
+                "skip": skip_count,
+                "total": len(files),
+                "overwrite": overwrite,
+            })
 
         return Response(sse(), mimetype="text/event-stream")
 
     return app
 
-
-# =========================
-# Utilities
-# =========================
 
 def list_files(root_dir: str, recursive: bool = True) -> List[str]:
     results: List[str] = []
@@ -200,7 +203,6 @@ def extract_text(path: str, knowledge_style: str = "rag_markdown") -> Tuple[str,
         "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
     }
 
-    # テキスト系
     if ext in {
         ".txt", ".md", ".csv", ".json", ".log",
         ".html", ".xml", ".yml", ".yaml", ".ini", ".conf",
@@ -209,7 +211,6 @@ def extract_text(path: str, knowledge_style: str = "rag_markdown") -> Tuple[str,
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             return f.read(), meta
 
-    # Word
     if ext == ".docx":
         doc = Document(path)
         parts = []
@@ -219,11 +220,9 @@ def extract_text(path: str, knowledge_style: str = "rag_markdown") -> Tuple[str,
                 parts.append(t)
         return "\n".join(parts), meta
 
-    # PDF
     if ext == ".pdf":
         return extract_pdf_like(path), meta
 
-    # Excel（xlsx/xlsm: openpyxl, xls: xlrd）
     if ext in {".xlsx", ".xlsm", ".xls"}:
         if knowledge_style == "rag_natural":
             text = extract_excel_as_markdown_tables(path, ext)
@@ -231,17 +230,12 @@ def extract_text(path: str, knowledge_style: str = "rag_markdown") -> Tuple[str,
             text = extract_excel_as_row_records(path, ext)
         return text, meta
 
-    # PowerPoint（ppt/pptx: python-pptx）
-    # ※ python-pptx は基本的に .pptx 用。 .ppt は失敗時に変換を促す。
     if ext in {".ppt", ".pptx"}:
         return extract_ppt_like(path, ext), meta
 
     raise RuntimeError(f"未対応の拡張子です: {ext}")
 
 
-# -------------------------
-# PDF like
-# -------------------------
 def extract_pdf_like(path: str) -> str:
     reader = PdfReader(path)
     parts = []
@@ -253,19 +247,10 @@ def extract_pdf_like(path: str) -> str:
     return "\n\n".join(parts)
 
 
-# -------------------------
-# Excel: row records (standard/faq)
-# -------------------------
 def extract_excel_as_row_records(path: str, ext: str) -> str:
-    """
-    標準/FAQ向け：
-    - 各シートでヘッダー行を最初の非空行として採用
-    - データ行は [ROW] {json...} で列名:値 を明示
-    """
     if ext == ".xls":
         return extract_xls_as_row_records(path)
-    else:
-        return extract_xlsx_like_as_row_records(path)
+    return extract_xlsx_like_as_row_records(path)
 
 
 def extract_xlsx_like_as_row_records(path: str) -> str:
@@ -330,7 +315,6 @@ def extract_xls_as_row_records(path: str) -> str:
             out.append("")
             continue
 
-        # rows as list of lists
         rows = []
         for r in range(sheet.nrows):
             rows.append([sheet.cell_value(r, c) for c in range(sheet.ncols)])
@@ -372,19 +356,10 @@ def extract_xls_as_row_records(path: str) -> str:
     return "\n".join(out).strip()
 
 
-# -------------------------
-# Excel: markdown tables (rag_natural)
-# -------------------------
 def extract_excel_as_markdown_tables(path: str, ext: str) -> str:
-    """
-    自然言語向け：
-    - シートごとにMarkdownテーブルとして提示
-    - 行数が多い場合は先頭N行まで（安全）
-    """
     if ext == ".xls":
         return extract_xls_as_markdown_tables(path)
-    else:
-        return extract_xlsx_like_as_markdown_tables(path)
+    return extract_xlsx_like_as_markdown_tables(path)
 
 
 def extract_xlsx_like_as_markdown_tables(path: str) -> str:
@@ -502,14 +477,7 @@ def extract_xls_as_markdown_tables(path: str) -> str:
     return "\n".join(out).strip()
 
 
-# -------------------------
-# PowerPoint like (ppt/pptx)
-# -------------------------
 def extract_ppt_like(path: str, ext: str) -> str:
-    """
-    .pptx: python-pptx でスライド単位に抽出
-    .ppt : python-pptx 非対応のことが多いので、失敗したら変換を促す
-    """
     try:
         prs = Presentation(path)
     except Exception:
@@ -588,9 +556,6 @@ def sse_event(event: str, data: Dict) -> str:
 
 
 def safe_err(msg: str) -> str:
-    """
-    画面に返すエラーを安全化（URLやキーの断片が混ざっても出さない）
-    """
     if not msg:
         return "不明なエラー"
     msg = re.sub(r"(app-[A-Za-z0-9_\-]{10,})", "app-***REDACTED***", msg)
@@ -598,10 +563,6 @@ def safe_err(msg: str) -> str:
     msg = re.sub(r"https?://[^\s]+", "[URL_REDACTED]", msg)
     return msg[:300]
 
-
-# =========================
-# AI API (Dify互換: /chat-messages) - Secure
-# =========================
 
 def convert_via_dify_chat_messages_secure(
     api_base: str,
@@ -613,10 +574,6 @@ def convert_via_dify_chat_messages_secure(
     knowledge_style: str,
     chunk_sep: str,
 ) -> str:
-    """
-    - APIキーをログにもレスポンスにも出さない
-    - APIエラー時も生レスポンスを返さない（漏洩防止）
-    """
     url = f"{api_base}/chat-messages"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -668,7 +625,6 @@ def build_rag_instruction(source_path: str, source_meta: Dict[str, str], knowled
     meta_lines = "\n".join([f"- {k}: {v}" for k, v in source_meta.items()])
     ext = (source_meta.get("ext") or "").lower()
 
-    # ★必須：最初に全体構成チャンクを必ず1つ作る（目次/分類）
     first_chunk_rule = f"""
         # 最初のチャンク（必須）
         - 出力の最初のチャンクは必ず「全体構成（目次/分類）」にする。
@@ -679,7 +635,6 @@ def build_rag_instruction(source_path: str, source_meta: Dict[str, str], knowled
         - そのチャンクの末尾に必ず「{chunk_sep}」を単独行で置く。
         """
 
-    # Excel特別ルール（標準/FAQのみ：rag_naturalでは無効）
     excel_rules = ""
     if ext in {".xlsx", ".xls", ".xlsm"} and knowledge_style != "rag_natural":
         excel_rules = f"""
