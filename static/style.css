@@ -16,6 +16,7 @@
 
     --ok: #16a34a;
     --bad: #b91c1c;
+    --skip: #b45309;
 
     --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 
@@ -314,6 +315,60 @@ button:disabled {
     }
 }
 
+/* log styles */
+.log-line {
+    display: block;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.25;
+    margin-bottom: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.log-ts {
+    color: var(--muted);
+    margin-right: 8px;
+}
+
+.log-tag {
+    font-weight: 700;
+    margin-right: 8px;
+}
+
+.log-tag.ok {
+    color: var(--ok);
+}
+
+.log-tag.err {
+    color: var(--bad);
+}
+
+.log-tag.skip {
+    color: var(--skip);
+}
+
+.log-msg {
+    color: var(--text);
+}
+
+.log-sub {
+    padding-left: 18px;
+    color: var(--muted);
+    display: block;
+}
+
+.log-submark {
+    margin-right: 8px;
+    color: var(--muted);
+}
+
+.log-submsg {
+    color: var(--text);
+    word-break: break-word;
+}
+
+/* NOTICE Modal */
 body.modalOpen {
     overflow: hidden;
 }

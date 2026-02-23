@@ -22,11 +22,64 @@
     const noticeClose = $("noticeClose");
     const noticeOk = $("noticeOk");
 
+    function escapeHtml(s) {
+        return String(s)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
+    function appendLogHtml(html) {
+        log.innerHTML += html;
+        log.scrollTop = log.scrollHeight;
+    }
+
     function addLog(line, kind = "info") {
         const ts = new Date().toLocaleTimeString();
-        const prefix = kind === "bad" ? "[ERR]" : kind === "ok" ? "[OK]" : "[..]";
-        log.textContent += `${ts} ${prefix} ${line}\n`;
-        log.scrollTop = log.scrollHeight;
+        const text = escapeHtml(line);
+        let tagClass = "info";
+        let tagLabel = "[..]";
+        if (kind === "ok") {
+            tagClass = "ok";
+            tagLabel = "[OK]";
+        } else if (kind === "bad") {
+            tagClass = "err";
+            tagLabel = "[ERR]";
+        } else if (kind === "skip") {
+            tagClass = "skip";
+            tagLabel = "[SKIP]";
+        }
+        const html = `<div class="log-line"><span class="log-ts">${ts}</span> <span class="log-tag ${tagClass}">${tagLabel}</span> <span class="log-msg">${text}</span></div>`;
+        appendLogHtml(html);
+    }
+
+    function addTwoLine(filePath, secondLine, kind = "ok") {
+        const ts = new Date().toLocaleTimeString();
+        const fileEsc = escapeHtml(filePath);
+        const secondEsc = escapeHtml(secondLine);
+        let tagClass = "ok";
+        let tagLabel = "[OK]";
+        if (kind === "err") {
+            tagClass = "err";
+            tagLabel = "[ERR]";
+        } else if (kind === "skip") {
+            tagClass = "skip";
+            tagLabel = "[SKIP]";
+        }
+        const first = `<div class="log-line"><span class="log-ts">${ts}</span> <span class="log-tag ${tagClass}">${tagLabel}</span> <span class="log-msg">保存: ${fileEsc}</span></div>`;
+        const second = `<div class="log-line log-sub"><span class="log-submark">&gt;</span> <span class="log-submsg">${secondEsc}</span></div>`;
+        appendLogHtml(first + second);
+    }
+
+    function addErrorTwoLine(filePath, errMsg) {
+        const ts = new Date().toLocaleTimeString();
+        const fileEsc = escapeHtml(filePath);
+        const errEsc = escapeHtml(errMsg);
+        const first = `<div class="log-line"><span class="log-ts">${ts}</span> <span class="log-tag err">[ERR]</span> <span class="log-msg">失敗: ${fileEsc}</span></div>`;
+        const second = `<div class="log-line log-sub"><span class="log-submark">&gt;</span> <span class="log-submsg">${errEsc}</span></div>`;
+        appendLogHtml(first + second);
     }
 
     function setFiles(files) {
@@ -128,7 +181,7 @@
     });
 
     scanBtn.addEventListener("click", async () => {
-        log.textContent = "";
+        log.innerHTML = "";
         fileList.textContent = "";
         addLog("スキャン開始");
 
@@ -145,7 +198,7 @@
     });
 
     runBtn.addEventListener("click", async () => {
-        log.textContent = "";
+        log.innerHTML = "";
         addLog("変換開始（SSE）");
         runBtn.disabled = true;
         scanBtn.disabled = true;
@@ -206,11 +259,11 @@
                     } else if (ev === "progress") {
                         addLog(`(${obj.index}/${obj.total}) ${obj.file}`);
                     } else if (ev === "skip_one") {
-                        addLog(`スキップ: ${obj.file}（既存）`, "ok");
+                        addTwoLine(obj.file, obj.out || "", "skip");
                     } else if (ev === "done_one") {
-                        addLog(`保存: ${obj.file} -> ${obj.out}`, "ok");
+                        addTwoLine(obj.file, obj.out || "", "ok");
                     } else if (ev === "error_one") {
-                        addLog(`失敗: ${obj.file} / ${obj.error}`, "bad");
+                        addErrorTwoLine(obj.file, obj.error || "不明なエラー");
                     } else if (ev === "summary") {
                         addLog(`完了: OK=${obj.ok}, SKIP=${obj.skip}, NG=${obj.ng}, TOTAL=${obj.total}`, "ok");
                     }
