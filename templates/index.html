@@ -1,3 +1,4 @@
+<!-- templates/index.html -->
 <!doctype html>
 <html lang="ja">
 
@@ -7,20 +8,15 @@
     <title>{{ title }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="icon" type="image/svg+xml"
-        href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="0.9em" font-size="90">👄</text></svg>'>
+        href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="0.9em" font-size="90">💋</text></svg>'>
 </head>
 
 <body>
     <div class="wrap">
         <header class="topbar">
             <div class="topbar-row">
-
-                <!-- 左：バナー画像 -->
                 <img class="topbar-banner" src="{{ url_for('static', filename='banner.png') }}" alt="ChuっとRagコンバーター" />
-
-                <!-- 右：モデル表示 -->
                 <div class="model-pill">{{ model_label }}</div>
-
             </div>
         </header>
 
@@ -111,6 +107,19 @@
             <span class="pill">Excel(xlsx/xls/xlsm)対応</span>
             <span class="pill">Dify /chat-messages blocking</span>
         </footer>
+    </div>
+
+    <div id="noticeModal" class="modalOverlay" aria-hidden="true">
+        <div class="modalCard" role="dialog" aria-modal="true" aria-labelledby="noticeTitle">
+            <div class="modalHead">
+                <div id="noticeTitle" class="modalTitle">NOTICE</div>
+                <button id="noticeClose" class="modalClose" type="button" aria-label="閉じる">×</button>
+            </div>
+            <div id="noticeBody" class="modalBody mono"></div>
+            <div class="modalFoot">
+                <button id="noticeOk" class="primary" type="button">閉じる</button>
+            </div>
+        </div>
     </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>

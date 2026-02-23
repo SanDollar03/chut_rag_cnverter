@@ -1,8 +1,8 @@
-requests
-flask
+Flask==3.0.3
+requests==2.32.3
+python-docx==1.1.2
+pypdf==5.1.0
 python-dotenv
-python-docx
-pypdf
 openpyxl
 xlrd
 python-pptx

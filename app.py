@@ -21,7 +21,7 @@ from pptx import Presentation
 
 load_dotenv()
 
-APP_TITLE = "Chuっと👄RAGナレッジ変換（Markdown）"
+APP_TITLE = "ChuっとRagコンバーター for MarkDown"
 HEADER_MODEL_LABEL = "Model : ChatGPT 5.2"
 
 API_BASE = (os.getenv("DIFY_API_BASE") or "").strip().rstrip("/")
@@ -40,8 +40,23 @@ MAX_INPUT_CHARS = 180_000
 DEFAULT_CHUNK_SEP = "***"
 REQ_TIMEOUT_SEC = 300
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+NOTICE_PATH = os.path.join(BASE_DIR, "notice.txt")
+
+
+def ensure_notice_file() -> None:
+    if os.path.exists(NOTICE_PATH):
+        return
+    try:
+        with open(NOTICE_PATH, "w", encoding="utf-8") as f:
+            f.write("")
+    except Exception:
+        pass
+
 
 def create_app():
+    ensure_notice_file()
+
     app = Flask(__name__)
     app.config["JSON_AS_ASCII"] = False
 
@@ -61,6 +76,20 @@ def create_app():
             "api_ready": bool(API_BASE and API_KEY),
             "model_label": HEADER_MODEL_LABEL,
         })
+
+    @app.get("/api/notice")
+    def api_notice():
+        ensure_notice_file()
+        try:
+            with open(NOTICE_PATH, "r", encoding="utf-8", errors="ignore") as f:
+                txt = f.read()
+        except Exception:
+            return jsonify({"ok": False, "error": "notice.txt の読み取りに失敗しました。"}), 500
+
+        if len(txt) > 50_000:
+            txt = txt[:50_000] + "\n...(truncated)\n"
+
+        return jsonify({"ok": True, "text": txt})
 
     @app.post("/api/scan")
     def api_scan():

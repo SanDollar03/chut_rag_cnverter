@@ -1,3 +1,4 @@
+/* static/style.css */
 :root {
     --bg: #f5f6fa;
     --panel: #ffffff;
@@ -38,12 +39,7 @@ body {
 
 body {
     margin: 0;
-    font-family: "Inter", "Noto Sans JP", "Segoe UI",
-        "Hiragino Kaku Gothic ProN",
-        "ヒラギノ角ゴ ProN W3",
-        "Meiryo",
-        "メイリオ",
-        sans-serif;
+    font-family: "Inter", "Noto Sans JP", "Segoe UI", "Hiragino Kaku Gothic ProN", "ヒラギノ角ゴ ProN W3", "Meiryo", "メイリオ", sans-serif;
     background: var(--bg);
     color: var(--text);
     font-size: 14px;
@@ -251,6 +247,18 @@ button:disabled {
     border-radius: var(--r-pill);
 }
 
+.runRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: nowrap;
+}
+
+.overwriteOpt {
+    margin: 0;
+    white-space: nowrap;
+}
+
 @media (max-width: 980px) {
     .grid {
         grid-template-columns: 1fr;
@@ -294,21 +302,7 @@ button:disabled {
     button {
         width: 100%;
     }
-}
 
-.runRow {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: nowrap;
-}
-
-.overwriteOpt {
-    margin: 0;
-    white-space: nowrap;
-}
-
-@media (max-width: 520px) {
     .runRow {
         flex-direction: column;
         align-items: stretch;
@@ -317,5 +311,126 @@ button:disabled {
 
     .overwriteOpt {
         justify-content: center;
+    }
+}
+
+body.modalOpen {
+    overflow: hidden;
+}
+
+.modalOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 9999;
+}
+
+.modalOverlay.show {
+    display: flex;
+}
+
+.modalCard {
+    width: min(920px, 100%);
+    max-height: 88vh;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    box-shadow: var(--shadow-1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.modalHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+    gap: 10px;
+    min-width: 0;
+}
+
+.modalTitle {
+    font-weight: 900;
+    font-size: 14px;
+    letter-spacing: .02em;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.modalClose {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    border: 1px solid var(--input-line);
+    background: #ffffff;
+    color: var(--text);
+    font-size: 20px;
+    line-height: 1;
+    padding: 0;
+    flex: 0 0 auto;
+}
+
+.modalBody {
+    padding: 14px 16px;
+    overflow: auto;
+    background: var(--surface);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    flex: 1 1 auto;
+    min-height: 140px;
+    font-size: 12px;
+}
+
+.modalFoot {
+    padding: 12px 16px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+@media (max-width: 520px) {
+    .modalOverlay {
+        padding: 10px;
+    }
+
+    .modalCard {
+        width: 100%;
+        max-height: 92vh;
+        border-radius: 14px;
+    }
+
+    .modalHead {
+        padding: 10px 12px;
+    }
+
+    .modalClose {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        font-size: 18px;
+    }
+
+    .modalBody {
+        padding: 10px 12px;
+        min-height: 120px;
+        font-size: 12px;
+    }
+
+    .modalFoot {
+        padding: 10px 12px;
+    }
+
+    .modalFoot button {
+        width: 100%;
     }
 }

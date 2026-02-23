@@ -17,6 +17,11 @@
     const fileList = $("fileList");
     const log = $("log");
 
+    const noticeModal = $("noticeModal");
+    const noticeBody = $("noticeBody");
+    const noticeClose = $("noticeClose");
+    const noticeOk = $("noticeOk");
+
     function addLog(line, kind = "info") {
         const ts = new Date().toLocaleTimeString();
         const prefix = kind === "bad" ? "[ERR]" : kind === "ok" ? "[OK]" : "[..]";
@@ -41,17 +46,86 @@
         return data;
     }
 
+    async function getJSON(url) {
+        const r = await fetch(url, { cache: "no-store" });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+        return data;
+    }
+
     async function getHealth() {
         try {
-            const r = await fetch("/api/health");
+            const r = await fetch("/api/health", { cache: "no-store" });
             const data = await r.json();
             if (!data.api_ready) {
                 addLog(".env の DIFY_API_BASE / DIFY_API_KEY が未設定です。", "bad");
             }
         } catch {
-            // noop
         }
     }
+
+    function openNoticeModal(text) {
+        if (!noticeModal || !noticeBody) return;
+        noticeBody.textContent = text ?? "";
+        noticeModal.setAttribute("aria-hidden", "false");
+        noticeModal.classList.add("show");
+        document.body.classList.add("modalOpen");
+    }
+
+    function closeNoticeModal() {
+        if (!noticeModal) return;
+        noticeModal.setAttribute("aria-hidden", "true");
+        noticeModal.classList.remove("show");
+        document.body.classList.remove("modalOpen");
+    }
+
+    function navType() {
+        try {
+            const nav = performance.getEntriesByType?.("navigation");
+            if (nav && nav.length) return nav[0].type || null;
+        } catch {
+        }
+        return null;
+    }
+
+    function shouldShowNoticeOnThisLoad() {
+        const t = navType();
+        if (t === "reload") return true;
+        if (t === "navigate") return false;
+
+        const KEY = "notice_seen_first_load";
+        try {
+            const seen = sessionStorage.getItem(KEY);
+            if (!seen) {
+                sessionStorage.setItem(KEY, "1");
+                return false;
+            }
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    async function showNoticeIfNeeded() {
+        if (!shouldShowNoticeOnThisLoad()) return;
+        try {
+            const data = await getJSON("/api/notice");
+            openNoticeModal(data.text || "");
+        } catch (e) {
+            addLog(`NOTICE取得失敗: ${e.message}`, "bad");
+        }
+    }
+
+    noticeClose?.addEventListener("click", closeNoticeModal);
+    noticeOk?.addEventListener("click", closeNoticeModal);
+    noticeModal?.addEventListener("click", (e) => {
+        if (e.target === noticeModal) closeNoticeModal();
+    });
+    window.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && noticeModal?.classList.contains("show")) {
+            closeNoticeModal();
+        }
+    });
 
     scanBtn.addEventListener("click", async () => {
         log.textContent = "";
@@ -153,4 +227,5 @@
     });
 
     getHealth();
+    showNoticeIfNeeded();
 })();
