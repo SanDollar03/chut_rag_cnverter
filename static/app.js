@@ -1,4 +1,3 @@
-// static/app.js
 (() => {
     const $ = (id) => document.getElementById(id);
 
