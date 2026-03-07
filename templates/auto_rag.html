@@ -1,4 +1,4 @@
-<!-- templates/index.html -->
+<!-- templates/auto_rag.html -->
 <!doctype html>
 <html lang="ja">
 
@@ -19,8 +19,8 @@
 
                 <div class="topbar-right">
                     <div class="page-switch">
-                        <a class="page-btn active" href="/">手動</a>
-                        <a class="page-btn" href="/auto">自動</a>
+                        <a class="page-btn" href="/">手動</a>
+                        <a class="page-btn active" href="/auto">自動</a>
                     </div>
                     <div class="model-pill">{{ model_label }}</div>
                 </div>
@@ -46,7 +46,7 @@
                     <button id="scanBtn">対象ファイルをスキャン</button>
 
                     <div class="runRow">
-                        <button id="runBtn" class="primary">変換を開始</button>
+                        <button id="runBtn" class="primary">変換 → ナレッジ登録</button>
 
                         <label class="row overwriteOpt">
                             <input id="overwrite" type="checkbox" />
@@ -67,7 +67,25 @@
             </section>
 
             <section class="card">
-                <h2>2) 変換設定</h2>
+                <h2>2) ナレッジ登録設定</h2>
+
+                {% if not api_ready %}
+                <div class="hint" style="color:#b91c1c;">
+                    .env に <b>DIFY_API_BASE</b> / <b>DIFY_API_KEY</b> を設定してください（未設定）。
+                </div>
+                {% endif %}
+
+                {% if not dataset_api_ready %}
+                <div class="hint" style="color:#b91c1c;">
+                    .env に <b>DIFY_DATASET_API_BASE</b> / <b>DIFY_DATASET_API_KEY</b> を設定してください（未設定）。
+                </div>
+                {% endif %}
+
+                <label>ナレッジ（Dataset）選択</label>
+                <div class="row2 inlineRow" style="margin-top:0;">
+                    <select id="dataset"></select>
+                    <button id="reloadDatasetsBtn" type="button">再読込</button>
+                </div>
 
                 <label>user（任意）</label>
                 <input id="user" type="text" value="rag_converter" />
@@ -82,11 +100,9 @@
                 <label>チャンク区切り文字（単独行）</label>
                 <input id="chunkSep" type="text" value="***" />
 
-                {% if not api_ready %}
-                <div class="hint" style="color:#b91c1c;">
-                    .env に <b>DIFY_API_BASE</b> / <b>DIFY_API_KEY</b> を設定してください（未設定）。
+                <div class="hint">
+                    変換完了後、生成Markdownを Dify ナレッジへ API 登録します（ハイブリッド検索）。
                 </div>
-                {% endif %}
             </section>
 
             <section class="card full">
@@ -118,7 +134,7 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='auto_rag.js') }}"></script>
 </body>
 
 </html>
