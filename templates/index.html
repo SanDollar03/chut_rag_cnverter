@@ -1,4 +1,3 @@
-<!-- templates/index.html -->
 <!doctype html>
 <html lang="ja">
 
@@ -17,10 +16,10 @@
             <div class="topbar-row">
                 <img class="topbar-banner" src="{{ url_for('static', filename='banner.png') }}" alt="ChuっとRagコンバーター" />
 
-                <div class="topbar-right">
-                    <div class="page-switch">
-                        <a class="page-btn active" href="/">手動</a>
-                        <a class="page-btn" href="/auto">自動</a>
+                <div class="topbar-actions">
+                    <div class="modeBtns">
+                        <a class="modeBtn active" href="/">手動</a>
+                        <a class="modeBtn" href="/auto">自動</a>
                     </div>
                     <div class="model-pill">{{ model_label }}</div>
                 </div>
@@ -43,10 +42,10 @@
                 </label>
 
                 <div class="row2">
-                    <button id="scanBtn">対象ファイルをスキャン</button>
+                    <button id="scanBtn" type="button">対象ファイルをスキャン</button>
 
                     <div class="runRow">
-                        <button id="runBtn" class="primary">変換を開始</button>
+                        <button id="runBtn" class="primary" type="button">変換を開始</button>
 
                         <label class="row overwriteOpt">
                             <input id="overwrite" type="checkbox" />
@@ -57,7 +56,8 @@
 
                 <div class="hint">
                     対象拡張子：
-                    txt / md / csv / json / log / html / xml / yml / yaml / ini / conf /
+                    txt / md / csv / json / log /
+                    html / xml / yml / yaml / ini / conf /
                     py / js / css /
                     docx / pdf /
                     xlsx / xls / xlsm /
@@ -67,7 +67,7 @@
             </section>
 
             <section class="card">
-                <h2>2) 変換設定</h2>
+                <h2>2) 変換パラメータ</h2>
 
                 <label>user（任意）</label>
                 <input id="user" type="text" value="rag_converter" />
@@ -81,12 +81,6 @@
 
                 <label>チャンク区切り文字（単独行）</label>
                 <input id="chunkSep" type="text" value="***" />
-
-                {% if not api_ready %}
-                <div class="hint" style="color:#b91c1c;">
-                    .env に <b>DIFY_API_BASE</b> / <b>DIFY_API_KEY</b> を設定してください（未設定）。
-                </div>
-                {% endif %}
             </section>
 
             <section class="card full">

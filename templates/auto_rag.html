@@ -1,4 +1,3 @@
-<!-- templates/auto_rag.html -->
 <!doctype html>
 <html lang="ja">
 
@@ -17,10 +16,10 @@
             <div class="topbar-row">
                 <img class="topbar-banner" src="{{ url_for('static', filename='banner.png') }}" alt="ChuっとRagコンバーター" />
 
-                <div class="topbar-right">
-                    <div class="page-switch">
-                        <a class="page-btn" href="/">手動</a>
-                        <a class="page-btn active" href="/auto">自動</a>
+                <div class="topbar-actions">
+                    <div class="modeBtns">
+                        <a class="modeBtn" href="/">手動</a>
+                        <a class="modeBtn active" href="/auto">自動</a>
                     </div>
                     <div class="model-pill">{{ model_label }}</div>
                 </div>
@@ -43,10 +42,10 @@
                 </label>
 
                 <div class="row2">
-                    <button id="scanBtn">対象ファイルをスキャン</button>
+                    <button id="scanBtn" type="button">対象ファイルをスキャン</button>
 
                     <div class="runRow">
-                        <button id="runBtn" class="primary">変換 → ナレッジ登録</button>
+                        <button id="runBtn" class="primary" type="button">変換 → ナレッジ登録</button>
 
                         <label class="row overwriteOpt">
                             <input id="overwrite" type="checkbox" />
@@ -57,7 +56,8 @@
 
                 <div class="hint">
                     対象拡張子：
-                    txt / md / csv / json / log / html / xml / yml / yaml / ini / conf /
+                    txt / md / csv / json / log /
+                    html / xml / yml / yaml / ini / conf /
                     py / js / css /
                     docx / pdf /
                     xlsx / xls / xlsm /
@@ -67,21 +67,9 @@
             </section>
 
             <section class="card">
-                <h2>2) ナレッジ登録設定</h2>
+                <h2>2) Dify / ナレッジ設定</h2>
 
-                {% if not api_ready %}
-                <div class="hint" style="color:#b91c1c;">
-                    .env に <b>DIFY_API_BASE</b> / <b>DIFY_API_KEY</b> を設定してください（未設定）。
-                </div>
-                {% endif %}
-
-                {% if not dataset_api_ready %}
-                <div class="hint" style="color:#b91c1c;">
-                    .env に <b>DIFY_DATASET_API_BASE</b> / <b>DIFY_DATASET_API_KEY</b> を設定してください（未設定）。
-                </div>
-                {% endif %}
-
-                <label>ナレッジ（Dataset）選択</label>
+                <label>ナレッジ（Dataset）選択（{{ dataset_prefix }}*）</label>
                 <div class="row2 inlineRow" style="margin-top:0;">
                     <select id="dataset"></select>
                     <button id="reloadDatasetsBtn" type="button">再読込</button>
@@ -101,7 +89,8 @@
                 <input id="chunkSep" type="text" value="***" />
 
                 <div class="hint">
-                    変換完了後、生成Markdownを Dify ナレッジへ API 登録します（ハイブリッド検索）。
+                    登録時の設定：
+                    separator（区切り）/ max_tokens（長さ）/ 検索方式（hybrid_search）を、生成Markdownから自動で設定して登録します。
                 </div>
             </section>
 
