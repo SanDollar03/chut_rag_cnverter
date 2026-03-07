@@ -3,6 +3,7 @@
 import os
 import re
 import json
+import time
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 
@@ -21,11 +22,14 @@ from pptx import Presentation
 
 load_dotenv()
 
-APP_TITLE = "ChuっとRagコンバーター for MarkDown"
+APP_TITLE = "CHUPPY RAG CONVERTER"
 HEADER_MODEL_LABEL = "Model : ChatGPT 5.2"
 
 API_BASE = (os.getenv("DIFY_API_BASE") or "").strip().rstrip("/")
 API_KEY = (os.getenv("DIFY_API_KEY") or "").strip()
+
+DATASET_API_BASE = (os.getenv("DIFY_DATASET_API_BASE") or "").strip().rstrip("/")
+DATASET_API_KEY = (os.getenv("DIFY_DATASET_API_KEY") or "").strip()
 
 ALLOWED_EXTS = {
     ".txt", ".md", ".csv", ".json", ".log",
@@ -60,20 +64,38 @@ def create_app():
     app = Flask(__name__)
     app.config["JSON_AS_ASCII"] = False
 
+    def is_api_ready() -> bool:
+        return bool(API_BASE and API_KEY)
+
+    def is_dataset_api_ready() -> bool:
+        # ナレッジAPIは専用設定を優先。未設定なら /chat-messages の設定を流用可能。
+        return bool((DATASET_API_BASE and DATASET_API_KEY) or (API_BASE and API_KEY))
+
     @app.get("/")
     def index():
         return render_template(
             "index.html",
             title=APP_TITLE,
             model_label=HEADER_MODEL_LABEL,
-            api_ready=bool(API_BASE and API_KEY),
+            api_ready=is_api_ready(),
+        )
+
+    @app.get("/auto")
+    def auto_page():
+        return render_template(
+            "auto_rag.html",
+            title=f"{APP_TITLE} (AUTO)",
+            model_label=HEADER_MODEL_LABEL,
+            api_ready=is_api_ready(),
+            dataset_api_ready=is_dataset_api_ready(),
         )
 
     @app.get("/api/health")
     def api_health():
         return jsonify({
             "ok": True,
-            "api_ready": bool(API_BASE and API_KEY),
+            "api_ready": is_api_ready(),
+            "dataset_api_ready": is_dataset_api_ready(),
             "model_label": HEADER_MODEL_LABEL,
         })
 
@@ -91,6 +113,19 @@ def create_app():
 
         return jsonify({"ok": True, "text": txt})
 
+    @app.get("/api/datasets")
+    def api_datasets():
+        # Dify ナレッジベース一覧
+        base, key = get_dataset_api_config()
+        if not base or not key:
+            return jsonify({"ok": False, "error": "ナレッジAPI設定が未完了です。.env を確認してください。"}), 500
+
+        try:
+            items = dify_list_datasets(base=base, key=key)
+            return jsonify({"ok": True, "items": items})
+        except Exception as e:
+            return jsonify({"ok": False, "error": safe_err(str(e))}), 500
+
     @app.post("/api/scan")
     def api_scan():
         data = request.get_json(force=True) or {}
@@ -105,7 +140,7 @@ def create_app():
 
     @app.post("/api/run")
     def api_run():
-        if not API_BASE or not API_KEY:
+        if not is_api_ready():
             return jsonify({
                 "ok": False,
                 "error": "サーバー側API設定が未完了です。.env に DIFY_API_BASE / DIFY_API_KEY を設定してください。"
@@ -144,7 +179,7 @@ def create_app():
             skip_count = 0
 
             for idx, relpath in enumerate(files, start=1):
-                abspath = os.path.join(input_dir, relpath)
+                abspath = os.path.abspath(os.path.join(input_dir, relpath))
                 yield sse_event("progress", {"index": idx, "total": len(files), "file": relpath})
 
                 try:
@@ -156,6 +191,8 @@ def create_app():
                         continue
 
                     raw_text, meta = extract_text(abspath, knowledge_style=knowledge_style)
+                    meta["relpath"] = relpath
+                    meta["abspath"] = abspath
 
                     if not raw_text.strip():
                         raise RuntimeError("抽出テキストが空でした。")
@@ -163,7 +200,7 @@ def create_app():
                     if len(raw_text) > MAX_INPUT_CHARS:
                         raw_text = raw_text[:MAX_INPUT_CHARS] + "\n...(truncated)\n"
 
-                    md = convert_via_dify_chat_messages_secure(
+                    answer = convert_via_dify_chat_messages_secure(
                         api_base=API_BASE,
                         api_key=API_KEY,
                         user=user,
@@ -173,6 +210,8 @@ def create_app():
                         knowledge_style=knowledge_style,
                         chunk_sep=chunk_sep,
                     )
+
+                    md = wrap_markdown_with_source_meta(answer, meta)
 
                     os.makedirs(os.path.dirname(out_path), exist_ok=True)
                     with open(out_path, "w", encoding="utf-8", newline="\n") as f:
@@ -195,8 +234,179 @@ def create_app():
 
         return Response(sse(), mimetype="text/event-stream")
 
+    @app.post("/api/auto/run")
+    def api_auto_run():
+        if not is_api_ready():
+            return jsonify({
+                "ok": False,
+                "error": "サーバー側API設定が未完了です。.env に DIFY_API_BASE / DIFY_API_KEY を設定してください。"
+            }), 500
+
+        base_ds, key_ds = get_dataset_api_config()
+        if not base_ds or not key_ds:
+            return jsonify({
+                "ok": False,
+                "error": "ナレッジAPI設定が未完了です。.env に DIFY_DATASET_API_BASE / DIFY_DATASET_API_KEY を設定してください。"
+            }), 500
+
+        data = request.get_json(force=True) or {}
+
+        input_dir = (data.get("input_dir") or "").strip()
+        output_dir = (data.get("output_dir") or "").strip()
+        recursive = bool(data.get("recursive", True))
+
+        dataset_id = (data.get("dataset_id") or "").strip()
+
+        user = (data.get("user") or "rag_converter").strip()
+        knowledge_style = (data.get("knowledge_style") or "rag_markdown").strip()
+        chunk_sep = (data.get("chunk_sep") or DEFAULT_CHUNK_SEP).strip() or DEFAULT_CHUNK_SEP
+
+        overwrite = bool(data.get("overwrite", False))
+
+        if not dataset_id:
+            return jsonify({"ok": False, "error": "ナレッジ（dataset_id）が未指定です。"}), 400
+
+        if not input_dir or not os.path.isdir(input_dir):
+            return jsonify({"ok": False, "error": "入力フォルダが存在しません。"}), 400
+        if not output_dir:
+            return jsonify({"ok": False, "error": "出力フォルダが未指定です。"}), 400
+
+        os.makedirs(output_dir, exist_ok=True)
+        files = list_files(input_dir, recursive=recursive)
+
+        # dataset名をログ用に取る（失敗しても続行）
+        dataset_name = None
+        try:
+            dataset_name = dify_get_dataset_name(base=base_ds, key=key_ds, dataset_id=dataset_id)
+        except Exception:
+            dataset_name = None
+
+        def sse():
+            yield sse_event("meta", {
+                "title": APP_TITLE,
+                "model": HEADER_MODEL_LABEL,
+                "total": len(files),
+                "overwrite": overwrite,
+                "dataset_name": dataset_name,
+            })
+
+            ok_count = 0
+            ng_count = 0
+            skip_count = 0
+
+            for idx, relpath in enumerate(files, start=1):
+                abspath = os.path.abspath(os.path.join(input_dir, relpath))
+                yield sse_event("progress", {"index": idx, "total": len(files), "file": relpath})
+
+                try:
+                    out_path = make_output_path(output_dir, relpath)
+
+                    if (not overwrite) and os.path.exists(out_path):
+                        skip_count += 1
+                        yield sse_event("skip_one", {"file": relpath, "out": os.path.relpath(out_path, output_dir)})
+                        continue
+
+                    raw_text, meta = extract_text(abspath, knowledge_style=knowledge_style)
+                    meta["relpath"] = relpath
+                    meta["abspath"] = abspath
+
+                    if not raw_text.strip():
+                        raise RuntimeError("抽出テキストが空でした。")
+
+                    if len(raw_text) > MAX_INPUT_CHARS:
+                        raw_text = raw_text[:MAX_INPUT_CHARS] + "\n...(truncated)\n"
+
+                    answer = convert_via_dify_chat_messages_secure(
+                        api_base=API_BASE,
+                        api_key=API_KEY,
+                        user=user,
+                        source_path=relpath,
+                        source_meta=meta,
+                        text=raw_text,
+                        knowledge_style=knowledge_style,
+                        chunk_sep=chunk_sep,
+                    )
+
+                    md = wrap_markdown_with_source_meta(answer, meta)
+
+                    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+                    with open(out_path, "w", encoding="utf-8", newline="\n") as f:
+                        f.write(md)
+
+                    yield sse_event("done_one", {"file": relpath, "out": os.path.relpath(out_path, output_dir)})
+
+                    # ---- ナレッジ登録 ----
+                    doc_name = os.path.basename(out_path)
+                    yield sse_event("dataset", {"message": f"ナレッジ登録開始: {doc_name}"})
+
+                    # Markdownから分割長をざっくり推定（短い=小さく、長い=大きく）
+                    max_tokens = estimate_max_tokens(md)
+
+                    doc_form = "text_model"
+                    if looks_hierarchical(md):
+                        doc_form = "hierarchical_model"
+
+                    resp = dify_create_doc_by_text(
+                        base=base_ds,
+                        key=key_ds,
+                        dataset_id=dataset_id,
+                        name=doc_name,
+                        text=md,
+                        separator=chunk_sep,
+                        max_tokens=max_tokens,
+                        doc_form=doc_form,
+                    )
+
+                    batch = resp.get("batch")
+                    doc_id = (resp.get("document") or {}).get("id")
+
+                    if doc_id:
+                        yield sse_event("dataset", {"message": f"ナレッジ登録受付: doc_id={doc_id}"})
+                    if batch:
+                        yield sse_event("dataset", {"message": f"埋め込み進捗監視開始: batch={batch}"})
+
+                    if batch:
+                        # インデックス完了までポーリング
+                        poll_count = 0
+                        while True:
+                            poll_count += 1
+                            st = dify_get_indexing_status(
+                                base=base_ds,
+                                key=key_ds,
+                                dataset_id=dataset_id,
+                                batch=batch,
+                            )
+                            msg, done, level = summarize_indexing_status(st)
+                            yield sse_event("dataset", {"message": msg, "level": level})
+                            if done:
+                                break
+                            if poll_count >= 120:
+                                yield sse_event("dataset", {"message": "進捗監視タイムアウト（120回）。処理はDify側で継続中の可能性があります。", "level": "bad"})
+                                break
+                            time.sleep(2.0)
+
+                    ok_count += 1
+
+                except Exception as e:
+                    ng_count += 1
+                    yield sse_event("error_one", {"file": relpath, "error": safe_err(str(e))})
+
+            yield sse_event("summary", {
+                "ok": ok_count,
+                "ng": ng_count,
+                "skip": skip_count,
+                "total": len(files),
+                "overwrite": overwrite,
+            })
+
+        return Response(sse(), mimetype="text/event-stream")
+
     return app
 
+
+# -----------------------------
+# File scan
+# -----------------------------
 
 def list_files(root_dir: str, recursive: bool = True) -> List[str]:
     results: List[str] = []
@@ -221,6 +431,10 @@ def list_files(root_dir: str, recursive: bool = True) -> List[str]:
     results.sort()
     return results
 
+
+# -----------------------------
+# Extract
+# -----------------------------
 
 def extract_text(path: str, knowledge_style: str = "rag_markdown") -> Tuple[str, Dict[str, str]]:
     ext = os.path.splitext(path)[1].lower()
@@ -518,55 +732,77 @@ def extract_ppt_like(path: str, ext: str) -> str:
     for i, slide in enumerate(prs.slides):
         slide_text: List[str] = []
         for shape in slide.shapes:
-            if hasattr(shape, "text"):
+            try:
+                if not hasattr(shape, "text"):
+                    continue
                 t = (shape.text or "").strip()
                 if t:
                     slide_text.append(t)
+            except Exception:
+                continue
 
-        txt = "\n".join(slide_text)
-        txt = normalize_pdf_like_text(txt)
-        if txt.strip():
-            parts.append(f"[SLIDE {i+1}]\n{txt}")
+        if slide_text:
+            parts.append(f"[SLIDE {i+1}]\n" + "\n".join(slide_text))
 
-    return "\n\n".join(parts)
+    return "\n\n".join(parts).strip()
 
 
-def sanitize_header(cell) -> str:
-    if cell is None:
+def sanitize_header(v) -> str:
+    if v is None:
         return ""
-    s = str(cell).strip()
+    s = str(v).strip()
     s = re.sub(r"\s+", " ", s)
     return s
 
 
-def normalize_pdf_like_text(s: str) -> str:
-    lines = [ln.rstrip() for ln in s.splitlines()]
+def normalize_pdf_like_text(text: str) -> str:
+    text = text.replace("\u00a0", " ")
+    text = text.replace("\r", "\n")
+
+    lines = [ln.rstrip() for ln in text.split("\n")]
     out: List[str] = []
     buf = ""
 
     def flush():
         nonlocal buf
-        if buf:
-            out.append(buf)
-            buf = ""
+        if buf.strip():
+            out.append(buf.strip())
+        buf = ""
 
     for ln in lines:
-        t = ln.strip("\u00a0 ").strip()
+        t = ln.strip()
         if not t:
             flush()
-            out.append("")
             continue
-        if len(t) == 1:
-            buf += t
+
+        if not buf:
+            buf = t
+            continue
+
+        if re.search(r"[\u3002\.!?]$", buf):
+            flush()
+            buf = t
+            continue
+
+        if re.search(r"[-–—]$", buf):
+            buf = buf[:-1] + t
+            continue
+
+        if len(buf) < 80 and len(t) < 80:
+            buf += " " + t
         else:
             flush()
             out.append(t)
     flush()
 
-    text = "\n".join(out)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
+    text2 = "\n".join(out)
+    text2 = re.sub(r"\n{3,}", "\n\n", text2)
+    return text2.strip()
 
+
+# -----------------------------
+# Output
+# -----------------------------
 
 def make_output_path(output_dir: str, rel_input_path: str) -> str:
     base, _ = os.path.splitext(rel_input_path)
@@ -580,6 +816,35 @@ def sanitize_relpath(p: str) -> str:
     return p
 
 
+def wrap_markdown_with_source_meta(answer_md: str, meta: Dict[str, str]) -> str:
+    # ② 生成Markdownに「変換前の元ファイルのフルパス/メタデータ」を付与
+    # YAML front matter 形式（RAGでも扱いやすい）
+    relpath = meta.get("relpath", "")
+    abspath = meta.get("abspath", "")
+    filename = meta.get("filename", "")
+    ext = meta.get("ext", "")
+    size_bytes = meta.get("size_bytes", "")
+    mtime = meta.get("mtime", "")
+
+    fm = (
+        "---\n"
+        f"source_relpath: {relpath}\n"
+        f"source_abspath: {abspath}\n"
+        f"source_filename: {filename}\n"
+        f"source_ext: {ext}\n"
+        f"source_size_bytes: {size_bytes}\n"
+        f"source_mtime: {mtime}\n"
+        f"generated_at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        "---\n\n"
+    )
+
+    return fm + (answer_md.strip() + "\n")
+
+
+# -----------------------------
+# SSE / safety
+# -----------------------------
+
 def sse_event(event: str, data: Dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
@@ -590,8 +855,12 @@ def safe_err(msg: str) -> str:
     msg = re.sub(r"(app-[A-Za-z0-9_\-]{10,})", "app-***REDACTED***", msg)
     msg = re.sub(r"(Bearer\s+)[A-Za-z0-9_\-\.=]+", r"\1***REDACTED***", msg, flags=re.IGNORECASE)
     msg = re.sub(r"https?://[^\s]+", "[URL_REDACTED]", msg)
-    return msg[:300]
+    return msg[:400]
 
+
+# -----------------------------
+# Dify Chat
+# -----------------------------
 
 def convert_via_dify_chat_messages_secure(
     api_base: str,
@@ -733,6 +1002,164 @@ def build_rag_instruction(source_path: str, source_meta: Dict[str, str], knowled
         """.strip()
 
 
+# -----------------------------
+# Dify Dataset API
+# -----------------------------
+
+def get_dataset_api_config() -> Tuple[str, str]:
+    # 専用設定があれば優先、なければ /chat-messages の設定を流用
+    base = DATASET_API_BASE or API_BASE
+    key = DATASET_API_KEY or API_KEY
+    return base, key
+
+
+def dify_list_datasets(base: str, key: str) -> List[Dict]:
+    # Dify Docs: GET /datasets
+    url = f"{base}/datasets"
+    headers = {"Authorization": f"Bearer {key}"}
+    params = {"page": 1, "limit": 100}
+
+    r = requests.get(url, headers=headers, params=params, timeout=30)
+    if r.status_code >= 400:
+        raise RuntimeError(f"ナレッジ一覧取得に失敗しました（HTTP {r.status_code}）。")
+
+    data = r.json()
+    # 返り値は {data:[...], has_more, limit, page, total}
+    return data.get("data") or []
+
+
+def dify_get_dataset_name(base: str, key: str, dataset_id: str) -> Optional[str]:
+    # 一覧から引く（APIに直接のgetが無い環境もあるため）
+    items = dify_list_datasets(base=base, key=key)
+    for it in items:
+        if (it.get("id") or "") == dataset_id:
+            return it.get("name")
+    return None
+
+
+def dify_create_doc_by_text(
+    base: str,
+    key: str,
+    dataset_id: str,
+    name: str,
+    text: str,
+    separator: str,
+    max_tokens: int,
+    doc_form: str,
+) -> Dict:
+    # Dify Docs: POST /datasets/{dataset_id}/document/create-by-text
+    url = f"{base}/datasets/{dataset_id}/document/create-by-text"
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "name": name,
+        "text": text,
+        "indexing_technique": "high_quality",
+        "doc_form": doc_form,
+        "doc_language": "Japanese",
+        "process_rule": {
+            "mode": "automatic",
+            "rules": {
+                "pre_processing_rules": [
+                    {"id": "remove_extra_spaces", "enabled": True},
+                ],
+                "segmentation": {
+                    "separator": separator,
+                    "max_tokens": max_tokens,
+                },
+                "parent_mode": "full-doc",
+                "subchunk_segmentation": {
+                    "separator": separator,
+                    "max_tokens": max(200, int(max_tokens * 0.6)),
+                    "chunk_overlap": 50,
+                },
+            },
+        },
+        "retrieval_model": {
+            "search_method": "hybrid_search",
+            "reranking_enable": False,
+            "top_k": 8,
+            "score_threshold_enabled": False,
+        },
+    }
+
+    r = requests.post(url, headers=headers, json=payload, timeout=REQ_TIMEOUT_SEC)
+    if r.status_code >= 400:
+        raise RuntimeError(f"ナレッジ登録に失敗しました（HTTP {r.status_code}）。")
+
+    return r.json()
+
+
+def dify_get_indexing_status(base: str, key: str, dataset_id: str, batch: str) -> Dict:
+    # Dify Docs: GET /datasets/{dataset_id}/documents/{batch}/indexing-status
+    url = f"{base}/datasets/{dataset_id}/documents/{batch}/indexing-status"
+    headers = {"Authorization": f"Bearer {key}"}
+
+    r = requests.get(url, headers=headers, timeout=30)
+    if r.status_code >= 400:
+        raise RuntimeError(f"進捗取得に失敗しました（HTTP {r.status_code}）。")
+
+    return r.json()
+
+
+def summarize_indexing_status(st: Dict) -> Tuple[str, bool, str]:
+    # data: [{indexing_status, completed_segments, total_segments, error, ...}]
+    rows = st.get("data") or []
+    if not rows:
+        return ("埋め込み進捗: (no data)", False, "info")
+
+    row = rows[0]
+    status = (row.get("indexing_status") or "").lower()
+    done_seg = row.get("completed_segments")
+    total_seg = row.get("total_segments")
+    err = row.get("error")
+
+    if err:
+        return (f"埋め込みエラー: {safe_err(str(err))}", True, "bad")
+
+    if isinstance(done_seg, int) and isinstance(total_seg, int) and total_seg > 0:
+        msg = f"埋め込み進捗: {done_seg}/{total_seg} (status={status})"
+    else:
+        msg = f"埋め込み進捗: status={status}"
+
+    if status in {"completed", "succeeded", "success"}:
+        return (msg + " → 完了", True, "ok")
+
+    if status in {"failed", "error", "stopped"}:
+        return (msg + " → 失敗", True, "bad")
+
+    return (msg, False, "info")
+
+
+# -----------------------------
+# Heuristics
+# -----------------------------
+
+def estimate_max_tokens(md: str) -> int:
+    # 文字数からざっくり推定（Difyのmax_tokensはトークンなので近似）
+    n = len(md)
+    if n < 8_000:
+        return 400
+    if n < 25_000:
+        return 700
+    if n < 60_000:
+        return 1000
+    return 1400
+
+
+def looks_hierarchical(md: str) -> bool:
+    # 見出しが多い&チャンク区切りが複数あるなら hierarchical を優先
+    h = len(re.findall(r"^#{2,3}\s+", md, flags=re.MULTILINE))
+    return h >= 12
+
+
+# -----------------------------
+# main
+# -----------------------------
+
 if __name__ == "__main__":
     app = create_app()
-    app.run(host="0.0.0.0", port=5210, debug=False, threaded=True)
+    app.run(host="0.0.0.0", port=5211, debug=False, threaded=True)
