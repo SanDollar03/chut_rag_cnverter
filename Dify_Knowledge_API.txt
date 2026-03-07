@@ -1,0 +1,1298 @@
+
+APIサーバー
+http://161.93.108.55:8890/v1
+稼働中
+
+Knowledge API
+Authentication
+Service API of Dify authenticates using an API-Key.
+
+It is suggested that developers store the API-Key in the backend instead of sharing or storing it in the client side to avoid the leakage of the API-Key, which may lead to property loss.
+
+All API requests should include your API-Key in the Authorization HTTP Header, as shown below:
+
+Code
+  Authorization: Bearer {API_KEY}
+
+
+Copy
+Copied!
+POST
+/datasets/{dataset_id}/document/create-by-text
+Create a Document from Text
+This API is based on an existing knowledge and creates a new document through text based on this knowledge.
+
+Params
+Name
+dataset_id
+Type
+string
+Description
+Knowledge ID
+
+Request Body
+Name
+name
+Type
+string
+Description
+Document name
+
+Name
+text
+Type
+string
+Description
+Document content
+
+Name
+indexing_technique
+Type
+string
+Description
+Index mode
+
+high_quality High quality: embedding using embedding model, built as vector database index
+economy Economy: Build using inverted index of keyword table index
+Name
+doc_form
+Type
+string
+Description
+Format of indexed content
+
+text_model Text documents are directly embedded; economy mode defaults to using this form
+hierarchical_model Parent-child mode
+qa_model Q&A Mode: Generates Q&A pairs for segmented documents and then embeds the questions
+Name
+doc_language
+Type
+string
+Description
+In Q&A mode, specify the language of the document, for example: English, Chinese
+
+Name
+process_rule
+Type
+object
+Description
+Processing rules
+
+mode (string) Cleaning, segmentation mode, automatic / custom
+rules (object) Custom rules (in automatic mode, this field is empty)
+pre_processing_rules (array[object]) Preprocessing rules
+id (string) Unique identifier for the preprocessing rule
+enumerate
+remove_extra_spaces Replace consecutive spaces, newlines, tabs
+remove_urls_emails Delete URL, email address
+enabled (bool) Whether to select this rule or not. If no document ID is passed in, it represents the default value.
+segmentation (object) Segmentation rules
+separator Custom segment identifier, currently only allows one delimiter to be set. Default is \n
+max_tokens Maximum length (token) defaults to 1000
+parent_mode Retrieval mode of parent chunks: full-doc full text retrieval / paragraph paragraph retrieval
+subchunk_segmentation (object) Child chunk rules
+separator Segmentation identifier. Currently, only one delimiter is allowed. The default is ***
+max_tokens The maximum length (tokens) must be validated to be shorter than the length of the parent chunk
+chunk_overlap Define the overlap between adjacent chunks (optional)
+When no parameters are set for the knowledge base, the first upload requires the following parameters to be provided; if not provided, the default parameters will be used.
+Name
+retrieval_model
+Type
+object
+Description
+Retrieval model
+
+search_method (string) Search method
+hybrid_search Hybrid search
+semantic_search Semantic search
+full_text_search Full-text search
+reranking_enable (bool) Whether to enable reranking
+reranking_mode (object) Rerank model configuration
+reranking_provider_name (string) Rerank model provider
+reranking_model_name (string) Rerank model name
+top_k (int) Number of results to return
+score_threshold_enabled (bool) Whether to enable score threshold
+score_threshold (float) Score threshold
+Name
+embedding_model
+Type
+string
+Description
+Embedding model name
+
+Name
+embedding_model_provider
+Type
+string
+Description
+Embedding model provider
+
+Request
+POST
+/datasets/{dataset_id}/document/create-by-text
+curl --location --request POST 'http://161.93.108.55:8890/v1/datasets/{dataset_id}/document/create-by-text' \
+--header 'Authorization: Bearer {api_key}' \
+--header 'Content-Type: application/json' \
+--data-raw '{"name": "text","text": "text","indexing_technique": "high_quality","process_rule": {"mode": "automatic"}}'
+
+Copy
+Copied!
+Response
+{
+  "document": {
+    "id": "",
+    "position": 1,
+    "data_source_type": "upload_file",
+    "data_source_info": {
+        "upload_file_id": ""
+    },
+    "dataset_process_rule_id": "",
+    "name": "text.txt",
+    "created_from": "api",
+    "created_by": "",
+    "created_at": 1695690280,
+    "tokens": 0,
+    "indexing_status": "waiting",
+    "error": null,
+    "enabled": true,
+    "disabled_at": null,
+    "disabled_by": null,
+    "archived": false,
+    "display_status": "queuing",
+    "word_count": 0,
+    "hit_count": 0,
+    "doc_form": "text_model"
+  },
+  "batch": ""
+}
+
+Copy
+Copied!
+POST
+/datasets/{dataset_id}/document/create-by-file
+Create a Document from a File
+This API is based on an existing knowledge and creates a new document through a file based on this knowledge.
+
+Params
+Name
+dataset_id
+Type
+string
+Description
+Knowledge ID
+
+Request Body
+Name
+data
+Type
+multipart/form-data json string
+Description
+original_document_id Source document ID (optional)
+
+Used to re-upload the document or modify the document cleaning and segmentation configuration. The missing information is copied from the source document
+The source document cannot be an archived document
+When original_document_id is passed in, the update operation is performed on behalf of the document. process_rule is a fillable item. If not filled in, the segmentation method of the source document will be used by default
+When original_document_id is not passed in, the new operation is performed on behalf of the document, and process_rule is required
+indexing_technique Index mode
+
+high_quality High quality: embedding using embedding model, built as vector database index
+economy Economy: Build using inverted index of keyword table index
+doc_form Format of indexed content
+
+text_model Text documents are directly embedded; economy mode defaults to using this form
+hierarchical_model Parent-child mode
+qa_model Q&A Mode: Generates Q&A pairs for segmented documents and then embeds the questions
+doc_language In Q&A mode, specify the language of the document, for example: English, Chinese
+
+process_rule Processing rules
+
+mode (string) Cleaning, segmentation mode, automatic / custom
+rules (object) Custom rules (in automatic mode, this field is empty)
+pre_processing_rules (array[object]) Preprocessing rules
+id (string) Unique identifier for the preprocessing rule
+enumerate
+remove_extra_spaces Replace consecutive spaces, newlines, tabs
+remove_urls_emails Delete URL, email address
+enabled (bool) Whether to select this rule or not. If no document ID is passed in, it represents the default value.
+segmentation (object) Segmentation rules
+separator Custom segment identifier, currently only allows one delimiter to be set. Default is \n
+max_tokens Maximum length (token) defaults to 1000
+parent_mode Retrieval mode of parent chunks: full-doc full text retrieval / paragraph paragraph retrieval
+subchunk_segmentation (object) Child chunk rules
+separator Segmentation identifier. Currently, only one delimiter is allowed. The default is ***
+max_tokens The maximum length (tokens) must be validated to be shorter than the length of the parent chunk
+chunk_overlap Define the overlap between adjacent chunks (optional)
+Name
+file
+Type
+multipart/form-data
+Description
+Files that need to be uploaded.
+
+When no parameters are set for the knowledge base, the first upload requires the following parameters to be provided; if not provided, the default parameters will be used.
+Name
+retrieval_model
+Type
+object
+Description
+Retrieval model
+
+search_method (string) Search method
+hybrid_search Hybrid search
+semantic_search Semantic search
+full_text_search Full-text search
+reranking_enable (bool) Whether to enable reranking
+reranking_mode (object) Rerank model configuration
+reranking_provider_name (string) Rerank model provider
+reranking_model_name (string) Rerank model name
+top_k (int) Number of results to return
+score_threshold_enabled (bool) Whether to enable score threshold
+score_threshold (float) Score threshold
+Name
+embedding_model
+Type
+string
+Description
+Embedding model name
+
+Name
+embedding_model_provider
+Type
+string
+Description
+Embedding model provider
+
+Request
+POST
+/datasets/{dataset_id}/document/create-by-file
+curl --location --request POST 'http://161.93.108.55:8890/v1/datasets/{dataset_id}/document/create-by-file' \
+--header 'Authorization: Bearer {api_key}' \
+--form 'data="{"indexing_technique":"high_quality","process_rule":{"rules":{"pre_processing_rules":[{"id":"remove_extra_spaces","enabled":true},{"id":"remove_urls_emails","enabled":true}],"segmentation":{"separator":"###","max_tokens":500}},"mode":"custom"}}";type=text/plain' \
+--form 'file=@"/path/to/file"'
+
+Copy
+Copied!
+Response
+{
+  "document": {
+    "id": "",
+    "position": 1,
+    "data_source_type": "upload_file",
+    "data_source_info": {
+      "upload_file_id": ""
+    },
+    "dataset_process_rule_id": "",
+    "name": "Dify.txt",
+    "created_from": "api",
+    "created_by": "",
+    "created_at": 1695308667,
+    "tokens": 0,
+    "indexing_status": "waiting",
+    "error": null,
+    "enabled": true,
+    "disabled_at": null,
+    "disabled_by": null,
+    "archived": false,
+    "display_status": "queuing",
+    "word_count": 0,
+    "hit_count": 0,
+    "doc_form": "text_model"
+  },
+  "batch": ""
+}
+
+Copy
+Copied!
+POST
+/datasets
+Create an Empty Knowledge Base
+Request Body
+Name
+name
+Type
+string
+Description
+Knowledge name
+
+Name
+description
+Type
+string
+Description
+Knowledge description (optional)
+
+Name
+indexing_technique
+Type
+string
+Description
+Index technique (optional)
+
+high_quality High quality
+economy Economy
+Name
+permission
+Type
+string
+Description
+Permission
+
+only_me Only me
+all_team_members All team members
+partial_members Partial members
+Name
+provider
+Type
+string
+Description
+Provider (optional, default: vendor)
+
+vendor Vendor
+external External knowledge
+Name
+external_knowledge_api_id
+Type
+str
+Description
+External knowledge API ID (optional)
+
+Name
+external_knowledge_id
+Type
+str
+Description
+External knowledge ID (optional)
+
+Request
+POST
+/datasets
+curl --location --request POST 'http://161.93.108.55:8890/v1/datasets' \
+--header 'Authorization: Bearer {api_key}' \
+--header 'Content-Type: application/json' \
+--data-raw '{"name": "name", "permission": "only_me"}'
+
+Copy
+Copied!
+Response
+{
+  "id": "",
+  "name": "name",
+  "description": null,
+  "provider": "vendor",
+  "permission": "only_me",
+  "data_source_type": null,
+  "indexing_technique": null,
+  "app_count": 0,
+  "document_count": 0,
+  "word_count": 0,
+  "created_by": "",
+  "created_at": 1695636173,
+  "updated_by": "",
+  "updated_at": 1695636173,
+  "embedding_model": null,
+  "embedding_model_provider": null,
+  "embedding_available": null
+}
+
+Copy
+Copied!
+GET
+/datasets
+Get Knowledge Base List
+Query
+Name
+page
+Type
+string
+Description
+Page number
+
+Name
+limit
+Type
+string
+Description
+Number of items returned, default 20, range 1-100
+
+Request
+GET
+/datasets
+curl --location --request GET 'http://161.93.108.55:8890/v1/datasets?page=1&limit=20' \
+--header 'Authorization: Bearer {api_key}'
+
+Copy
+Copied!
+Response
+{
+  "data": [
+    {
+      "id": "",
+      "name": "name",
+      "description": "desc",
+      "permission": "only_me",
+      "data_source_type": "upload_file",
+      "indexing_technique": "",
+      "app_count": 2,
+      "document_count": 10,
+      "word_count": 1200,
+      "created_by": "",
+      "created_at": "",
+      "updated_by": "",
+      "updated_at": ""
+    },
+    ...
+  ],
+  "has_more": true,
+  "limit": 20,
+  "total": 50,
+  "page": 1
+}
+
+Copy
+Copied!
+DELETE
+/datasets/{dataset_id}
+Delete a Knowledge Base
+Params
+Name
+dataset_id
+Type
+string
+Description
+Knowledge ID
+
+Request
+DELETE
+/datasets/{dataset_id}
+curl --location --request DELETE 'http://161.93.108.55:8890/v1/datasets/{dataset_id}' \
+--header 'Authorization: Bearer {api_key}'
+
+Copy
+Copied!
+Response
+204 No Content
+
+Copy
+Copied!
+POST
+/datasets/{dataset_id}/documents/{document_id}/update-by-text
+Update a Document with Text
+This API is based on an existing knowledge and updates the document through text based on this knowledge.
+
+Params
+Name
+dataset_id
+Type
+string
+Description
+Knowledge ID
+
+Name
+document_id
+Type
+string
+Description
+Document ID
+
+Request Body
+Name
+name
+Type
+string
+Description
+Document name (optional)
+
+Name
+text
+Type
+string
+Description
+Document content (optional)
+
+Name
+process_rule
+Type
+object
+Description
+Processing rules
+
+mode (string) Cleaning, segmentation mode, automatic / custom
+rules (object) Custom rules (in automatic mode, this field is empty)
+pre_processing_rules (array[object]) Preprocessing rules
+id (string) Unique identifier for the preprocessing rule
+enumerate
+remove_extra_spaces Replace consecutive spaces, newlines, tabs
+remove_urls_emails Delete URL, email address
+enabled (bool) Whether to select this rule or not. If no document ID is passed in, it represents the default value.
+segmentation (object) Segmentation rules
+separator Custom segment identifier, currently only allows one delimiter to be set. Default is \n
+max_tokens Maximum length (token) defaults to 1000
+parent_mode Retrieval mode of parent chunks: full-doc full text retrieval / paragraph paragraph retrieval
+subchunk_segmentation (object) Child chunk rules
+separator Segmentation identifier. Currently, only one delimiter is allowed. The default is ***
+max_tokens The maximum length (tokens) must be validated to be shorter than the length of the parent chunk
+chunk_overlap Define the overlap between adjacent chunks (optional)
+Request
+POST
+/datasets/{dataset_id}/documents/{document_id}/update-by-text
+curl --location --request POST 'http://161.93.108.55:8890/v1/datasets/{dataset_id}/documents/{document_id}/update-by-text' \
+--header 'Authorization: Bearer {api_key}' \
+--header 'Content-Type: application/json' \
+--data-raw '{"name": "name","text": "text"}'
+
+Copy
+Copied!
+Response
+{
+  "document": {
+    "id": "",
+    "position": 1,
+    "data_source_type": "upload_file",
+    "data_source_info": {
+      "upload_file_id": ""
+    },
+    "dataset_process_rule_id": "",
+    "name": "name.txt",
+    "created_from": "api",
+    "created_by": "",
+    "created_at": 1695308667,
+    "tokens": 0,
+    "indexing_status": "waiting",
+    "error": null,
+    "enabled": true,
+    "disabled_at": null,
+    "disabled_by": null,
+    "archived": false,
+    "display_status": "queuing",
+    "word_count": 0,
+    "hit_count": 0,
+    "doc_form": "text_model"
+  },
+  "batch": ""
+}
+
+Copy
+Copied!
+POST
+/datasets/{dataset_id}/documents/{document_id}/update-by-file
+Update a Document with a File
+This API is based on an existing knowledge, and updates documents through files based on this knowledge
+
+Params
+Name
+dataset_id
+Type
+string
+Description
+Knowledge ID
+
+Name
+document_id
+Type
+string
+Description
+Document ID
+
+Request Body
+Name
+name
+Type
+string
+Description
+Document name (optional)
+
+Name
+file
+Type
+multipart/form-data
+Description
+Files to be uploaded
+
+Name
+process_rule
+Type
+object
+Description
+Processing rules
+
+mode (string) Cleaning, segmentation mode, automatic / custom
+rules (object) Custom rules (in automatic mode, this field is empty)
+pre_processing_rules (array[object]) Preprocessing rules
+id (string) Unique identifier for the preprocessing rule
+enumerate
+remove_extra_spaces Replace consecutive spaces, newlines, tabs
+remove_urls_emails Delete URL, email address
+enabled (bool) Whether to select this rule or not. If no document ID is passed in, it represents the default value.
+segmentation (object) Segmentation rules
+separator Custom segment identifier, currently only allows one delimiter to be set. Default is \n
+max_tokens Maximum length (token) defaults to 1000
+parent_mode Retrieval mode of parent chunks: full-doc full text retrieval / paragraph paragraph retrieval
+subchunk_segmentation (object) Child chunk rules
+separator Segmentation identifier. Currently, only one delimiter is allowed. The default is ***
+max_tokens The maximum length (tokens) must be validated to be shorter than the length of the parent chunk
+chunk_overlap Define the overlap between adjacent chunks (optional)
+Request
+POST
+/datasets/{dataset_id}/documents/{document_id}/update-by-file
+curl --location --request POST 'http://161.93.108.55:8890/v1/datasets/{dataset_id}/documents/{document_id}/update-by-file' \
+--header 'Authorization: Bearer {api_key}' \
+--form 'data="{"name":"Dify","indexing_technique":"high_quality","process_rule":{"rules":{"pre_processing_rules":[{"id":"remove_extra_spaces","enabled":true},{"id":"remove_urls_emails","enabled":true}],"segmentation":{"separator":"###","max_tokens":500}},"mode":"custom"}}";type=text/plain' \
+--form 'file=@"/path/to/file"'
+
+Copy
+Copied!
+Response
+{
+  "document": {
+    "id": "",
+    "position": 1,
+    "data_source_type": "upload_file",
+    "data_source_info": {
+      "upload_file_id": ""
+    },
+    "dataset_process_rule_id": "",
+    "name": "Dify.txt",
+    "created_from": "api",
+    "created_by": "",
+    "created_at": 1695308667,
+    "tokens": 0,
+    "indexing_status": "waiting",
+    "error": null,
+    "enabled": true,
+    "disabled_at": null,
+    "disabled_by": null,
+    "archived": false,
+    "display_status": "queuing",
+    "word_count": 0,
+    "hit_count": 0,
+    "doc_form": "text_model"
+  },
+  "batch": "20230921150427533684"
+}
+
+Copy
+Copied!
+GET
+/datasets/{dataset_id}/documents/{batch}/indexing-status
+Get Document Embedding Status (Progress)
+Params
+Name
+dataset_id
+Type
+string
+Description
+Knowledge ID
+
+Name
+batch
+Type
+string
+Description
+Batch number of uploaded documents
+
+Request
+GET
+/datasets/{dataset_id}/documents/{batch}/indexing-status
+curl --location --request GET 'http://161.93.108.55:8890/v1/datasets/{dataset_id}/documents/{batch}/indexing-status' \
+--header 'Authorization: Bearer {api_key}'
+
+Copy
+Copied!
+Response
+{
+  "data":[{
+    "id": "",
+    "indexing_status": "indexing",
+    "processing_started_at": 1681623462.0,
+    "parsing_completed_at": 1681623462.0,
+    "cleaning_completed_at": 1681623462.0,
+    "splitting_completed_at": 1681623462.0,
+    "completed_at": null,
+    "paused_at": null,
+    "error": null,
+    "stopped_at": null,
+    "completed_segments": 24,
+    "total_segments": 100
+  }]
+}
+
+Copy
+Copied!
+DELETE
+/datasets/{dataset_id}/documents/{document_id}
+Delete a Document
+Params
+Name
+dataset_id
+Type
+string
+Description
+Knowledge ID
+
+Name
+document_id
+Type
+string
+Description
+Document ID
+
+Request
+DELETE
+/datasets/{dataset_id}/documents/{document_id}
+curl --location --request DELETE 'http://161.93.108.55:8890/v1/datasets/{dataset_id}/documents/{document_id}' \
+--header 'Authorization: Bearer {api_key}'
+
+Copy
+Copied!
+Response
+{
+  "result": "success"
+}
+
+Copy
+Copied!
+GET
+/datasets/{dataset_id}/documents
+Get the Document List of a Knowledge Base
+Params
+Name
+dataset_id
+Type
+string
+Description
+Knowledge ID
+
+Query
+Name
+keyword
+Type
+string
+Description
+Search keywords, currently only search document names (optional)
+
+Name
+page
+Type
+string
+Description
+Page number (optional)
+
+Name
+limit
+Type
+string
+Description
+Number of items returned, default 20, range 1-100 (optional)
+
+Request
+GET
+/datasets/{dataset_id}/documents
+curl --location --request GET 'http://161.93.108.55:8890/v1/datasets/{dataset_id}/documents' \
+--header 'Authorization: Bearer {api_key}'
+
+Copy
+Copied!
+Response
+{
+  "data": [
+    {
+      "id": "",
+      "position": 1,
+      "data_source_type": "file_upload",
+      "data_source_info": null,
+      "dataset_process_rule_id": null,
+      "name": "dify",
+      "created_from": "",
+      "created_by": "",
+      "created_at": 1681623639,
+      "tokens": 0,
+      "indexing_status": "waiting",
+      "error": null,
+      "enabled": true,
+      "disabled_at": null,
+      "disabled_by": null,
+      "archived": false
+    },
+  ],
+  "has_more": false,
+  "limit": 20,
+  "total": 9,
+  "page": 1
+}
+
+Copy
+Copied!
+POST
+/datasets/{dataset_id}/documents/{document_id}/segments
+Add Chunks to a Document
+Params
+Name
+dataset_id
+Type
+string
+Description
+Knowledge ID
+
+Name
+document_id
+Type
+string
+Description
+Document ID
+
+Request Body
+Name
+segments
+Type
+object list
+Description
+content (text) Text content / question content, required
+answer (text) Answer content, if the mode of the knowledge is Q&A mode, pass the value (optional)
+keywords (list) Keywords (optional)
+Request
+POST
+/datasets/{dataset_id}/documents/{document_id}/segments
+curl --location --request POST 'http://161.93.108.55:8890/v1/datasets/{dataset_id}/documents/{document_id}/segments' \
+--header 'Authorization: Bearer {api_key}' \
+--header 'Content-Type: application/json' \
+--data-raw '{"segments": [{"content": "1","answer": "1","keywords": ["a"]}]}'
+
+Copy
+Copied!
+Response
+{
+  "data": [{
+    "id": "",
+    "position": 1,
+    "document_id": "",
+    "content": "1",
+    "answer": "1",
+    "word_count": 25,
+    "tokens": 0,
+    "keywords": [
+      "a"
+    ],
+    "index_node_id": "",
+    "index_node_hash": "",
+    "hit_count": 0,
+    "enabled": true,
+    "disabled_at": null,
+    "disabled_by": null,
+    "status": "completed",
+    "created_by": "",
+    "created_at": 1695312007,
+    "indexing_at": 1695312007,
+    "completed_at": 1695312007,
+    "error": null,
+    "stopped_at": null
+  }],
+  "doc_form": "text_model"
+}
+
+Copy
+Copied!
+GET
+/datasets/{dataset_id}/documents/{document_id}/segments
+Get Chunks from a Document
+Path
+Name
+dataset_id
+Type
+string
+Description
+Knowledge ID
+
+Name
+document_id
+Type
+string
+Description
+Document ID
+
+Query
+Name
+keyword
+Type
+string
+Description
+Keyword (optional)
+
+Name
+status
+Type
+string
+Description
+Search status, completed
+
+Request
+GET
+/datasets/{dataset_id}/documents/{document_id}/segments
+curl --location --request GET 'http://161.93.108.55:8890/v1/datasets/{dataset_id}/documents/{document_id}/segments' \
+--header 'Authorization: Bearer {api_key}' \
+--header 'Content-Type: application/json'
+
+Copy
+Copied!
+Response
+{
+  "data": [{
+    "id": "",
+    "position": 1,
+    "document_id": "",
+    "content": "1",
+    "answer": "1",
+    "word_count": 25,
+    "tokens": 0,
+    "keywords": [
+        "a"
+    ],
+    "index_node_id": "",
+    "index_node_hash": "",
+    "hit_count": 0,
+    "enabled": true,
+    "disabled_at": null,
+    "disabled_by": null,
+    "status": "completed",
+    "created_by": "",
+    "created_at": 1695312007,
+    "indexing_at": 1695312007,
+    "completed_at": 1695312007,
+    "error": null,
+    "stopped_at": null
+  }],
+  "doc_form": "text_model"
+}
+
+Copy
+Copied!
+DELETE
+/datasets/{dataset_id}/documents/{document_id}/segments/{segment_id}
+Delete a Chunk in a Document
+Path
+Name
+dataset_id
+Type
+string
+Description
+Knowledge ID
+
+Name
+document_id
+Type
+string
+Description
+Document ID
+
+Name
+segment_id
+Type
+string
+Description
+Document Segment ID
+
+Request
+DELETE
+/datasets/{dataset_id}/documents/{document_id}/segments/{segment_id}
+curl --location --request DELETE 'http://161.93.108.55:8890/v1/datasets/{dataset_id}/segments/{segment_id}' \
+--header 'Authorization: Bearer {api_key}' \
+--header 'Content-Type: application/json'
+
+Copy
+Copied!
+Response
+{
+  "result": "success"
+}
+
+Copy
+Copied!
+POST
+/datasets/{dataset_id}/documents/{document_id}/segments/{segment_id}
+Update a Chunk in a Document
+POST
+Name
+dataset_id
+Type
+string
+Description
+Knowledge ID
+
+Name
+document_id
+Type
+string
+Description
+Document ID
+
+Name
+segment_id
+Type
+string
+Description
+Document Segment ID
+
+Request Body
+Name
+segment
+Type
+object
+Description
+content (text) Text content / question content, required
+answer (text) Answer content, passed if the knowledge is in Q&A mode (optional)
+keywords (list) Keyword (optional)
+enabled (bool) False / true (optional)
+regenerate_child_chunks (bool) Whether to regenerate child chunks (optional)
+Request
+POST
+/datasets/{dataset_id}/documents/{document_id}/segments/{segment_id}
+curl --location --request POST 'http://161.93.108.55:8890/v1/datasets/{dataset_id}/documents/{document_id}/segments/{segment_id}' \
+--header 'Authorization: Bearer {api_key}' \
+--header 'Content-Type: application/json'\
+--data-raw '{"segment": {"content": "1","answer": "1", "keywords": ["a"], "enabled": false}}'
+
+Copy
+Copied!
+Response
+{
+  "data": [{
+    "id": "",
+    "position": 1,
+    "document_id": "",
+    "content": "1",
+    "answer": "1",
+    "word_count": 25,
+    "tokens": 0,
+    "keywords": [
+        "a"
+    ],
+    "index_node_id": "",
+    "index_node_hash": "",
+    "hit_count": 0,
+    "enabled": true,
+    "disabled_at": null,
+    "disabled_by": null,
+    "status": "completed",
+    "created_by": "",
+    "created_at": 1695312007,
+    "indexing_at": 1695312007,
+    "completed_at": 1695312007,
+    "error": null,
+    "stopped_at": null
+  }],
+  "doc_form": "text_model"
+}
+
+Copy
+Copied!
+GET
+/datasets/{dataset_id}/documents/{document_id}/upload-file
+Get Upload File
+Path
+Name
+dataset_id
+Type
+string
+Description
+Knowledge ID
+
+Name
+document_id
+Type
+string
+Description
+Document ID
+
+Request
+GET
+/datasets/{dataset_id}/documents/{document_id}/upload-file
+curl --location --request GET 'http://161.93.108.55:8890/v1/datasets/{dataset_id}/documents/{document_id}/upload-file' \
+--header 'Authorization: Bearer {api_key}' \
+--header 'Content-Type: application/json'
+
+Copy
+Copied!
+Response
+{
+  "id": "file_id",
+  "name": "file_name",
+  "size": 1024,
+  "extension": "txt",
+  "url": "preview_url",
+  "download_url": "download_url",
+  "mime_type": "text/plain",
+  "created_by": "user_id",
+  "created_at": 1728734540,
+}
+
+Copy
+Copied!
+POST
+/datasets/{dataset_id}/retrieve
+Retrieve Chunks from a Knowledge Base
+Path
+Name
+dataset_id
+Type
+string
+Description
+Knowledge ID
+
+Request Body
+Name
+query
+Type
+string
+Description
+Query keyword
+
+Name
+retrieval_model
+Type
+object
+Description
+Retrieval model (optional, if not filled, it will be recalled according to the default method)
+
+search_method (text) Search method: One of the following four keywords is required
+keyword_search Keyword search
+semantic_search Semantic search
+full_text_search Full-text search
+hybrid_search Hybrid search
+reranking_enable (bool) Whether to enable reranking, required if the search mode is semantic_search or hybrid_search (optional)
+reranking_mode (object) Rerank model configuration, required if reranking is enabled
+reranking_provider_name (string) Rerank model provider
+reranking_model_name (string) Rerank model name
+weights (float) Semantic search weight setting in hybrid search mode
+top_k (integer) Number of results to return (optional)
+score_threshold_enabled (bool) Whether to enable score threshold
+score_threshold (float) Score threshold
+Name
+external_retrieval_model
+Type
+object
+Description
+Unused field
+
+Request
+POST
+/datasets/{dataset_id}/retrieve
+curl --location --request POST 'http://161.93.108.55:8890/v1/datasets/{dataset_id}/retrieve' \
+--header 'Authorization: Bearer {api_key}'\
+--header 'Content-Type: application/json'\
+--data-raw '{
+    "query": "test",
+    "retrieval_model": {
+        "search_method": "keyword_search",
+        "reranking_enable": false,
+        "reranking_mode": null,
+        "reranking_model": {
+            "reranking_provider_name": "",
+            "reranking_model_name": ""
+        },
+        "weights": null,
+        "top_k": 1,
+        "score_threshold_enabled": false,
+        "score_threshold": null
+    }
+}'
+
+Copy
+Copied!
+Response
+{
+  "query": {
+    "content": "test"
+  },
+  "records": [
+    {
+      "segment": {
+        "id": "7fa6f24f-8679-48b3-bc9d-bdf28d73f218",
+        "position": 1,
+        "document_id": "a8c6c36f-9f5d-4d7a-8472-f5d7b75d71d2",
+        "content": "Operation guide",
+        "answer": null,
+        "word_count": 847,
+        "tokens": 280,
+        "keywords": [
+          "install",
+          "java",
+          "base",
+          "scripts",
+          "jdk",
+          "manual",
+          "internal",
+          "opens",
+          "add",
+          "vmoptions"
+        ],
+        "index_node_id": "39dd8443-d960-45a8-bb46-7275ad7fbc8e",
+        "index_node_hash": "0189157697b3c6a418ccf8264a09699f25858975578f3467c76d6bfc94df1d73",
+        "hit_count": 0,
+        "enabled": true,
+        "disabled_at": null,
+        "disabled_by": null,
+        "status": "completed",
+        "created_by": "dbcb1ab5-90c8-41a7-8b78-73b235eb6f6f",
+        "created_at": 1728734540,
+        "indexing_at": 1728734552,
+        "completed_at": 1728734584,
+        "error": null,
+        "stopped_at": null,
+        "document": {
+          "id": "a8c6c36f-9f5d-4d7a-8472-f5d7b75d71d2",
+          "data_source_type": "upload_file",
+          "name": "readme.txt",
+          "doc_type": null
+        }
+      },
+      "score": 3.730463140527718e-05,
+      "tsne_position": null
+    }
+  ]
+}
+
+Copy
+Copied!
+Error message
+Name
+code
+Type
+string
+Description
+Error code
+
+Name
+status
+Type
+number
+Description
+Error status
+
+Name
+message
+Type
+string
+Description
+Error message
+
+Example
+  {
+    "code": "no_file_uploaded",
+    "message": "Please upload your file.",
+    "status": 400
+  }
+
+Copy
+Copied!
+code	status	message
+no_file_uploaded	400	Please upload your file.
+too_many_files	400	Only one file is allowed.
+file_too_large	413	File size exceeded.
+unsupported_file_type	415	File type not allowed.
+high_quality_dataset_only	400	Current operation only supports 'high-quality' datasets.
+dataset_not_initialized	400	The dataset is still being initialized or indexing. Please wait a moment.
+archived_document_immutable	403	The archived document is not editable.
+dataset_name_duplicate	409	The dataset name already exists. Please modify your dataset name.
+invalid_action	400	Invalid action.
+document_already_finished	400	The document has been processed. Please refresh the page or go to the document details.
+document_indexing	400	The document is being processed and cannot be edited.
+invalid_metadata	400	The metadata content is incorrect. Please check and verify.
