@@ -94,6 +94,16 @@ def create_app():
             dataset_prefix=DATASET_NAME_PREFIX,
         )
 
+    @app.get("/knowledge")
+    def knowledge_page():
+        return render_template(
+            "knowledge.html",
+            title=APP_TITLE + " (KNOWLEDGE)",
+            model_label=HEADER_MODEL_LABEL,
+            dataset_api_ready=bool(DATASET_API_BASE and DATASET_API_KEY),
+            dataset_prefix=DATASET_NAME_PREFIX,
+        )
+
     @app.get("/api/health")
     def api_health():
         return jsonify({
@@ -134,6 +144,136 @@ def create_app():
             return jsonify({"ok": False, "error": safe_err(str(e))}), 500
 
         return jsonify({"ok": True, "items": items, "prefix": DATASET_NAME_PREFIX})
+
+    @app.get("/api/knowledge/datasets/<dataset_id>/detail")
+    def api_knowledge_dataset_detail(dataset_id):
+        if not DATASET_API_BASE or not DATASET_API_KEY:
+            return jsonify({"ok": False, "error": "ナレッジAPI設定が未完了です（DIFY_DATASET_API_BASE / DIFY_DATASET_API_KEY）。"}), 500
+
+        try:
+            ds = dify_get_dataset_detail(
+                api_base=DATASET_API_BASE,
+                api_key=DATASET_API_KEY,
+                dataset_id=dataset_id,
+            )
+        except Exception as e:
+            return jsonify({"ok": False, "error": safe_err(str(e))}), 500
+
+        out = {"ok": True}
+        if isinstance(ds, dict):
+            out.update(ds)
+        else:
+            out["item"] = ds
+        return jsonify(out)
+
+    @app.get("/api/knowledge/datasets/<dataset_id>/documents")
+    def api_knowledge_documents(dataset_id):
+        if not DATASET_API_BASE or not DATASET_API_KEY:
+            return jsonify({"ok": False, "error": "ナレッジAPI設定が未完了です（DIFY_DATASET_API_BASE / DIFY_DATASET_API_KEY）。"}), 500
+
+        keyword = (request.args.get("keyword") or "").strip()
+
+        try:
+            items, total = dify_list_documents_all(
+                api_base=DATASET_API_BASE,
+                api_key=DATASET_API_KEY,
+                dataset_id=dataset_id,
+                keyword=keyword,
+                limit=100,
+            )
+        except Exception as e:
+            return jsonify({"ok": False, "error": safe_err(str(e))}), 500
+
+        return jsonify({"ok": True, "items": items, "total": total, "keyword": keyword})
+
+    @app.get("/api/knowledge/datasets/<dataset_id>/documents/<document_id>")
+    def api_knowledge_document_detail(dataset_id, document_id):
+        if not DATASET_API_BASE or not DATASET_API_KEY:
+            return jsonify({"ok": False, "error": "ナレッジAPI設定が未完了です（DIFY_DATASET_API_BASE / DIFY_DATASET_API_KEY）。"}), 500
+
+        metadata = (request.args.get("metadata") or "without").strip() or "without"
+
+        try:
+            doc = dify_get_document_detail(
+                api_base=DATASET_API_BASE,
+                api_key=DATASET_API_KEY,
+                dataset_id=dataset_id,
+                document_id=document_id,
+                metadata=metadata,
+            )
+        except Exception as e:
+            return jsonify({"ok": False, "error": safe_err(str(e))}), 500
+
+        out = {"ok": True}
+        if isinstance(doc, dict):
+            out.update(doc)
+        else:
+            out["item"] = doc
+        return jsonify(out)
+
+    @app.get("/api/knowledge/datasets/<dataset_id>/documents/<document_id>/segments")
+    def api_knowledge_segments(dataset_id, document_id):
+        if not DATASET_API_BASE or not DATASET_API_KEY:
+            return jsonify({"ok": False, "error": "ナレッジAPI設定が未完了です（DIFY_DATASET_API_BASE / DIFY_DATASET_API_KEY）。"}), 500
+
+        keyword = (request.args.get("keyword") or "").strip()
+        status = (request.args.get("status") or "").strip()
+
+        try:
+            page = int(request.args.get("page") or "1")
+            limit = int(request.args.get("limit") or "20")
+        except Exception:
+            page = 1
+            limit = 20
+
+        page = max(1, page)
+        limit = max(1, min(100, limit))
+
+        try:
+            res = dify_list_segments_page(
+                api_base=DATASET_API_BASE,
+                api_key=DATASET_API_KEY,
+                dataset_id=dataset_id,
+                document_id=document_id,
+                page=page,
+                limit=limit,
+                keyword=keyword,
+                status=status,
+            )
+        except Exception as e:
+            return jsonify({"ok": False, "error": safe_err(str(e))}), 500
+
+        return jsonify({
+            "ok": True,
+            "items": res.get("items") or [],
+            "has_more": bool(res.get("has_more")),
+            "total": int(res.get("total") or 0),
+            "page": int(res.get("page") or page),
+            "limit": int(res.get("limit") or limit),
+        })
+
+    @app.get("/api/knowledge/datasets/<dataset_id>/documents/<document_id>/segments/<segment_id>")
+    def api_knowledge_segment_detail(dataset_id, document_id, segment_id):
+        if not DATASET_API_BASE or not DATASET_API_KEY:
+            return jsonify({"ok": False, "error": "ナレッジAPI設定が未完了です（DIFY_DATASET_API_BASE / DIFY_DATASET_API_KEY）。"}), 500
+
+        try:
+            seg = dify_get_segment_detail(
+                api_base=DATASET_API_BASE,
+                api_key=DATASET_API_KEY,
+                dataset_id=dataset_id,
+                document_id=document_id,
+                segment_id=segment_id,
+            )
+        except Exception as e:
+            return jsonify({"ok": False, "error": safe_err(str(e))}), 500
+
+        out = {"ok": True}
+        if isinstance(seg, dict):
+            out.update(seg)
+        else:
+            out["item"] = seg
+        return jsonify(out)
 
     @app.post("/api/scan")
     def api_scan():
@@ -1109,6 +1249,124 @@ def dify_list_datasets(api_base: str, api_key: str, prefix: str, limit: int = 10
             break
 
     return out
+
+
+def dify_get_dataset_detail(api_base: str, api_key: str, dataset_id: str) -> Dict[str, Any]:
+    url = f"{api_base}/datasets/{dataset_id}"
+    r = requests.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=REQ_TIMEOUT_SEC)
+    # Dify環境/バージョン差で、このエンドポイントが GET を許可しない場合がある（405）。
+    # その場合は詳細表示を諦め、最低限の情報だけ返してドキュメント一覧の表示を継続する。
+    if r.status_code == 405:
+        return {
+            "id": dataset_id,
+            "name": "",
+            "_note": "datasets/{id} が GET 非対応のため、詳細は省略しました。",
+        }
+    if r.status_code >= 400:
+        raise RuntimeError(f"dataset詳細取得失敗（HTTP {r.status_code}）: {safe_err(r.text)}")
+    return r.json() if r.content else {}
+
+
+def dify_list_documents_all(
+    api_base: str,
+    api_key: str,
+    dataset_id: str,
+    keyword: str = "",
+    limit: int = 100,
+) -> Tuple[List[Dict[str, Any]], int]:
+    items_out: List[Dict[str, Any]] = []
+    page = 1
+    total = 0
+
+    while True:
+        qs = f"page={page}&limit={limit}"
+        if keyword:
+            qs += "&keyword=" + requests.utils.quote(keyword)
+
+        url = f"{api_base}/datasets/{dataset_id}/documents?{qs}"
+        r = requests.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=REQ_TIMEOUT_SEC)
+        if r.status_code >= 400:
+            raise RuntimeError(f"documents取得失敗（HTTP {r.status_code}）: {safe_err(r.text)}")
+
+        data = r.json() if r.content else {}
+        items = data.get("data") or []
+        total = int(data.get("total") or total or 0)
+
+        for it in items:
+            if isinstance(it, dict):
+                items_out.append(it)
+
+        if not bool(data.get("has_more")):
+            break
+
+        page += 1
+        if page > 200:
+            break
+
+    return items_out, total
+
+
+def dify_get_document_detail(
+    api_base: str,
+    api_key: str,
+    dataset_id: str,
+    document_id: str,
+    metadata: str = "without",
+) -> Dict[str, Any]:
+    meta = metadata.strip() if metadata else "without"
+    if meta not in {"all", "only", "without"}:
+        meta = "without"
+
+    url = f"{api_base}/datasets/{dataset_id}/documents/{document_id}?metadata={meta}"
+    r = requests.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=REQ_TIMEOUT_SEC)
+    if r.status_code >= 400:
+        raise RuntimeError(f"document詳細取得失敗（HTTP {r.status_code}）: {safe_err(r.text)}")
+    return r.json() if r.content else {}
+
+
+def dify_list_segments_page(
+    api_base: str,
+    api_key: str,
+    dataset_id: str,
+    document_id: str,
+    page: int = 1,
+    limit: int = 20,
+    keyword: str = "",
+    status: str = "",
+) -> Dict[str, Any]:
+    qs = f"page={page}&limit={limit}"
+    if keyword:
+        qs += "&keyword=" + requests.utils.quote(keyword)
+    if status:
+        qs += "&status=" + requests.utils.quote(status)
+
+    url = f"{api_base}/datasets/{dataset_id}/documents/{document_id}/segments?{qs}"
+    r = requests.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=REQ_TIMEOUT_SEC)
+    if r.status_code >= 400:
+        raise RuntimeError(f"segments取得失敗（HTTP {r.status_code}）: {safe_err(r.text)}")
+
+    data = r.json() if r.content else {}
+    return {
+        "items": data.get("data") or [],
+        "has_more": bool(data.get("has_more")),
+        "total": int(data.get("total") or 0),
+        "page": int(data.get("page") or page),
+        "limit": int(data.get("limit") or limit),
+    }
+
+
+def dify_get_segment_detail(
+    api_base: str,
+    api_key: str,
+    dataset_id: str,
+    document_id: str,
+    segment_id: str,
+) -> Dict[str, Any]:
+    url = f"{api_base}/datasets/{dataset_id}/documents/{document_id}/segments/{segment_id}"
+    r = requests.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=REQ_TIMEOUT_SEC)
+    if r.status_code >= 400:
+        raise RuntimeError(f"segment詳細取得失敗（HTTP {r.status_code}）: {safe_err(r.text)}")
+    return r.json() if r.content else {}
 
 
 def dify_create_document_by_text(
